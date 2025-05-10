@@ -3,6 +3,8 @@ import os
 import logging
 from http import HTTPStatus
 from contextlib import asynccontextmanager
+from checkbalance import check_balance
+
 
 # useful object patterns for a Telegram bot that interacts with the 1Shot API
 from objects import (
@@ -174,6 +176,7 @@ async def lifespan(app: FastAPI):
     # handle when the user calls /start
     app.application.add_handler(entrypoint_handler)
 
+    app.application.add_handler(CommandHandler("checkbalance", check_balance))
     # handles updates from 1shot by selecting Telegram updates of type WebhookPayload
     app.application.add_handler(TypeHandler(type=WebhookPayload, callback=webhook_update))
 
