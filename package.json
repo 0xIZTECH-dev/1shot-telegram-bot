@@ -1,0 +1,25 @@
+{
+  "name": "1shot-telegram-bot",
+  "version": "1.0.0",
+  "description": "This is a starter repo for building a Telegram bot (built with [python-telegram-bot](https://python-telegram-bot.org/)) based on the  [FastAPI](https://fastapi.tiangolo.com/) web framework. It demonstrates how to perform conversation flows, call the 1Shot API to  trigger onchain transactions, and handle webhook callbacks from both Telegram and 1Shot API.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UXlySoftware/1shot-telegram-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/UXlySoftware/1shot-telegram-bot/issues"
+  },
+  "homepage": "https://github.com/UXlySoftware/1shot-telegram-bot#readme",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "dotenv": "^16.5.0",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
