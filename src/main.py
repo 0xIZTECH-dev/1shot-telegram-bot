@@ -4,6 +4,8 @@ import logging
 from http import HTTPStatus
 from contextlib import asynccontextmanager
 from checkbalance import check_balance
+from checktime import get_time
+from hello import hello
 
 
 # useful object patterns for a Telegram bot that interacts with the 1Shot API
@@ -53,6 +55,10 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 
 import uvicorn
+from database import add_user
+from expense import get_expense_conversation_handler
+from goal import get_goal_conversation_handler
+from budget import get_budget_conversation_handler
 
 # Enable logging
 logging.basicConfig(
@@ -68,21 +74,25 @@ PORT = 8000 # The port that uvicorn will attach to
 # This is an entrypoint handler for the example bot, it gets triggered when a user types /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Start the bot and show the main menu."""
+    # Register user in database
+    user = update.effective_user
+    add_user(user.id, user.username)
 
-    buttons = []
-
-    text = "1Shot API is the easiest way to build Telegram bots with onchain functionality!\n\n"
-    text += "Use this simple bot as a starting point\n\n"
-    buttons.append([InlineKeyboardButton("🚀 Deploy a Token", callback_data="deploytoken")])
-
-    keyboard = InlineKeyboardMarkup(buttons)
+    text = f"👋 Hi {user.first_name}! I'm Penny, your personal financial assistant!\n\n"
+    text += "I can help you with:\n"
+    text += "• Tracking your expenses (/expense)\n"
+    text += "• Setting budgets (/budget)\n"
+    text += "• Viewing spending reports (/report)\n"
+    text += "• Setting financial goals (/goal)\n"
+    text += "• Getting spending insights (/insights)\n\n"
+    text += "Just let me know what you need help with! 💰"
 
     # If we're starting over we don't need to send a new message
     if context.user_data.get(ConversationState.START_OVER):
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await update.callback_query.edit_message_text(text=text, parse_mode=ParseMode.HTML)
     else:
-        await update.message.reply_text(text=text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text=text, parse_mode=ParseMode.HTML)
 
     context.user_data[ConversationState.START_OVER] = False
     return ConversationState.START_ROUTES
@@ -177,6 +187,11 @@ async def lifespan(app: FastAPI):
     app.application.add_handler(entrypoint_handler)
 
     app.application.add_handler(CommandHandler("checkbalance", check_balance))
+    app.application.add_handler(CommandHandler("time", get_time))
+    app.application.add_handler(CommandHandler("hello", hello))
+    app.application.add_handler(get_expense_conversation_handler())
+    app.application.add_handler(get_goal_conversation_handler())
+    app.application.add_handler(get_budget_conversation_handler())
     # handles updates from 1shot by selecting Telegram updates of type WebhookPayload
     app.application.add_handler(TypeHandler(type=WebhookPayload, callback=webhook_update))
 
