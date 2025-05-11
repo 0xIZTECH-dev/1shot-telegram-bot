@@ -84,7 +84,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text += "• Setting budgets (/budget)\n"
     text += "• Viewing spending reports (/report)\n"
     text += "• Setting financial goals (/goal)\n"
-    text += "• Getting spending insights (/insights)\n\n"
+    text += "• Getting spending insights (/insights)\n"
+    text += "• Deploy your own token (/deploytoken)\n\n"
     text += "Just let me know what you need help with! 💰"
 
     # If we're starting over we don't need to send a new message
@@ -172,7 +173,6 @@ async def lifespan(app: FastAPI):
         states={
             ConversationState.START_ROUTES: [
                 CommandHandler("start", start),
-                get_token_deployment_conversation_handler(),
                 CallbackQueryHandler(start, pattern="^start$"),
             ],
         },
@@ -192,6 +192,7 @@ async def lifespan(app: FastAPI):
     app.application.add_handler(get_expense_conversation_handler())
     app.application.add_handler(get_goal_conversation_handler())
     app.application.add_handler(get_budget_conversation_handler())
+    app.application.add_handler(get_token_deployment_conversation_handler())  # Token deployment as a top-level handler
     # handles updates from 1shot by selecting Telegram updates of type WebhookPayload
     app.application.add_handler(TypeHandler(type=WebhookPayload, callback=webhook_update))
 

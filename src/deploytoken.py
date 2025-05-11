@@ -156,12 +156,18 @@ async def successful_token_deployment(token_address: str, memo: TransactionMemo,
         parse_mode=ParseMode.HTML
     )
 
+async def deploy_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start the token deployment process when /deploytoken command is used."""
+    await update.message.reply_text("What do you want to name your token?")
+    return ConversationState.TOKEN_NAMING
+
 def get_token_deployment_conversation_handler() -> ConversationHandler:
     """Create and return the conversation handler for token deployment."""
     return ConversationHandler(
         entry_points=[
+            CommandHandler("deploytoken", deploy_token_command),
             CallbackQueryHandler(deploy_token_start, pattern="^deploytoken$")
-            ],
+        ],
         states={
             ConversationState.TOKEN_NAMING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_naming)],
             ConversationState.TOKEN_TICKER: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
