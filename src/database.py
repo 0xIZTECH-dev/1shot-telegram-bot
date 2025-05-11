@@ -12,12 +12,6 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Drop existing tables if they exist
-    cursor.execute("DROP TABLE IF EXISTS expenses")
-    cursor.execute("DROP TABLE IF EXISTS budgets")
-    cursor.execute("DROP TABLE IF EXISTS goals")
-    cursor.execute("DROP TABLE IF EXISTS users")
-    
     # Create users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (

@@ -1,31 +1,86 @@
 # checkbalance.py
 
-import os
+import logging
 from telegram import Update
 from telegram.ext import ContextTypes
-import requests
+from telegram.constants import ParseMode
+
+from oneshot import oneshot_client, BUSINESS_ID
+
+logger = logging.getLogger(__name__)
 
 async def check_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Lütfen bir cüzdan adresi girin.\nÖrn: `/checkbalance 0xabc...`", parse_mode="Markdown")
-        return
-
-    address = context.args[0]
-    api_key = os.getenv("ONESHOT_API_KEY")
-    business_id = os.getenv("ONESHOT_BUSINESS_ID")
-
+    """Check the balance of a wallet address."""
     try:
-        url = f"https://api.1shotapi.com/wallets/{address}/balance"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "X-Business-ID": business_id,
-        }
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+        # If no address provided, check the escrow wallet balance
+        if not context.args:
+            wallets = await oneshot_client.wallets.list(
+                BUSINESS_ID,
+                {"chain_id": "11155111"}  # Sepolia testnet
+            )
+            
+            if not wallets.response:
+                await update.message.reply_text(
+                    "❌ No escrow wallet found. Please contact support.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            
+            balance = float(wallets.response[0].account_balance_details.balance)
+            address = wallets.response[0].address
+            
+            message = (
+                "💰 *Escrow Wallet Balance*\n\n"
+                f"*Address:* `{address}`\n"
+                f"*Balance:* {balance:.6f} ETH\n"
+                "━━━━━━━━━━━━━━━"
+            )
+            
+            await update.message.reply_text(
+                message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
-        balance = data.get("balance", "0")
-        await update.message.reply_text(f"💰 `{address}`\nBakiyesi: *{balance} ETH*", parse_mode="Markdown")
+        # If address provided, check that specific address
+        address = context.args[0]
+        if not address.startswith("0x") or len(address) != 42:
+            await update.message.reply_text(
+                "❌ Invalid Ethereum address format. Please provide a valid address starting with '0x'.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Get balance for the specified address
+        wallets = await oneshot_client.wallets.list(
+            BUSINESS_ID,
+            {"chain_id": "11155111", "address": address}
+        )
+        
+        if not wallets.response:
+            await update.message.reply_text(
+                "❌ No wallet found with the provided address.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        balance = float(wallets.response[0].account_balance_details.balance)
+        
+        message = (
+            "💰 *Wallet Balance*\n\n"
+            f"*Address:* `{address}`\n"
+            f"*Balance:* {balance:.6f} ETH\n"
+            "━━━━━━━━━━━━━━━"
+        )
+        
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
     except Exception as e:
-        await update.message.reply_text("❌ Bakiye sorgularken hata oluştu.")
-        print(f"checkbalance error: {e}")
+        logger.error(f"Balance check error: {e}")
+        await update.message.reply_text(
+            "❌ An error occurred while checking the balance.",
+            parse_mode=ParseMode.MARKDOWN
+        )

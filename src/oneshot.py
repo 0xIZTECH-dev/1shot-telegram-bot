@@ -1,6 +1,11 @@
 import os
+import logging
 
 from uxly_1shot_client import AsyncClient
+
+# Enable logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # its handy to set your API key and secret with environment variables so you only have to change them in one place (i.e. docker-compose.env)
 API_KEY = os.getenv("ONESHOT_API_KEY")
@@ -11,3 +16,13 @@ BUSINESS_ID = os.getenv("ONESHOT_BUSINESS_ID")
 # its handy to instantiate it in a single location and import the singleton where you need it  
 # be sure to use the AsyncClient with asynchronous frameworks like FastAPI and python-telegram-bot       
 oneshot_client = AsyncClient(api_key=API_KEY, api_secret=API_SECRET)
+
+# Function to log the token - can be called from an async context
+async def log_token():
+    try:
+        token = await oneshot_client._get_token()
+        logger.info(f"Bearer Token: {token}")
+        return token
+    except Exception as e:
+        logger.error(f"Error getting token: {e}")
+        return None

@@ -14,12 +14,16 @@ class TxType(Enum):
     ADMIN_ADDED = 1
     TOKENS_MINTED = 2
     TOKENS_TRANSFERRED = 3
+    NATIVE_CURRENCY_TRANSFER = 4
 
 # use the memo field when you execute a transaction to include context on the callback to your bot
 class TransactionMemo(BaseModel):
-    tx_type: TxType = Field(..., description="The kind of transaction that was executed.") 
+    tx_type: TxType = Field(..., description="The kind of transaction that was executed.")
     associated_user_id: int = Field(..., description="The user id of the user that executed the transaction.")
+    chat_id: int = Field(..., description="The chat_id to send a confirmation message to.")
     note_to_user: Optional[str] = Field(None, description="Arbitrary info to relay to the associated_user")
+    amount_readable: Optional[str] = Field(None, description="User-friendly amount for confirmation messages.")
+    recipient_address: Optional[str] = Field(None, description="Recipient address for confirmation messages.")
 
 # we'll use this to store token information so we can send the user a message when the token is created
 class TokenInfo(BaseModel):

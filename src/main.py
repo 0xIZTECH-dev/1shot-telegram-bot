@@ -6,6 +6,11 @@ from contextlib import asynccontextmanager
 from checkbalance import check_balance
 from checktime import get_time
 from hello import hello
+from wallet import get_wallet_handler
+from transaction import get_transaction_handler
+from transactionendpoints import get_transaction_endpoints_handler
+from report import get_report_handler
+from escrowinfo import get_escrow_info_handler
 
 
 # useful object patterns for a Telegram bot that interacts with the 1Shot API
@@ -33,7 +38,8 @@ from deploytoken import (
 # Auth against 1Shot API is done in oneshot.py where we implement a singleton pattern
 from oneshot import (
     oneshot_client, # the 1Shot API async client that we instantiated in oneshot.py
-    BUSINESS_ID # The organization id for your 1Shot API account
+    BUSINESS_ID, # The organization id for your 1Shot API account
+    log_token
 )
 
 # the 1Shot Python SDK implements a helpful Pydantic dataclass model for Webhook callback payloads
@@ -59,6 +65,8 @@ from database import add_user
 from expense import get_expense_conversation_handler
 from goal import get_goal_conversation_handler
 from budget import get_budget_conversation_handler
+from tokentransfer import get_token_transfer_handler, token_transfer_success
+from aichat import get_ai_chat_handler
 
 # Enable logging
 logging.basicConfig(
@@ -79,13 +87,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     add_user(user.id, user.username)
 
     text = f"👋 Hi {user.first_name}! I'm Penny, your personal financial assistant!\n\n"
-    text += "I can help you with:\n"
+    text += "I can help you withhhh:\n"
     text += "• Tracking your expenses (/expense)\n"
     text += "• Setting budgets (/budget)\n"
     text += "• Viewing spending reports (/report)\n"
     text += "• Setting financial goals (/goal)\n"
     text += "• Getting spending insights (/insights)\n"
-    text += "• Deploy your own token (/deploytoken)\n\n"
+    text += "• Deploy your own token (/deploytoken)\n"
+    text += "• Transferring tokens (/tokentransfer)\n\n"
     text += "Just let me know what you need help with! 💰"
 
     # If we're starting over we don't need to send a new message
@@ -97,6 +106,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     context.user_data[ConversationState.START_OVER] = False
     return ConversationState.START_ROUTES
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays help information."""
+    help_text = (
+        "🤖 *Penny Bot Commands* 🤖\n\n"
+        "Here are all the commands you can use:\n\n"
+        "📊 *Finance Management*\n"
+        "• /expense - Track your expenses\n"
+        "• /budget - Set and manage budgets\n"
+        "• /goal - Create financial goals\n"
+        "• /report - View spending reports\n\n"
+        "💰 *Blockchain & Tokens*\n"
+        "• /wallet - Check wallet balance\n"
+        "• /checkbalance - Check token balances\n"
+        "• /transaction - Manage transactions\n"
+        "• /tokentransfer - Transfer tokens\n"
+        "• /deploytoken - Deploy a new token\n"
+        "• /endpoints - List transaction endpoints\n"
+        "• /myescrowinfo - Show your escrow wallet details\n\n"
+        "ℹ️ *General*\n"
+        "• /hello - Get a financial summary\n"
+        "• /time - Check current time\n"
+        "• /help - Show this help message\n\n"
+        "You can also chat with me naturally about finances and blockchain topics!"
+    )
+    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 # This handles webhooks coming from 1Shot API
 async def webhook_update(update: WebhookPayload, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -111,6 +146,7 @@ async def webhook_update(update: WebhookPayload, context: ContextTypes.DEFAULT_T
             return
         
         tx_memo = TransactionMemo.model_validate_json(update.data.transaction_execution_memo)
+        chat_id = tx_memo.chat_id # Assuming chat_id is part of your TransactionMemo
 
         # Check what kind of transaction was executed based on the memo and handle appropriately for you application
         if tx_memo.tx_type == TxType.TOKEN_CREATION:
@@ -119,6 +155,20 @@ async def webhook_update(update: WebhookPayload, context: ContextTypes.DEFAULT_T
                 if log.name == "TokenCreated":
                     token_address = log.args[0]
             await successful_token_deployment(token_address, tx_memo, context)
+        elif tx_memo.tx_type == TxType.TOKENS_TRANSFERRED:
+            transaction_hash = update.data.transaction_receipt.hash
+            await token_transfer_success(transaction_hash, tx_memo, context)
+        elif tx_memo.tx_type == TxType.NATIVE_CURRENCY_TRANSFER:
+            transaction_hash = update.data.transaction_receipt.hash
+            amount_readable = tx_memo.amount_readable if hasattr(tx_memo, 'amount_readable') and tx_memo.amount_readable else "an amount of"
+            recipient_address = tx_memo.recipient_address if hasattr(tx_memo, 'recipient_address') and tx_memo.recipient_address else "the recipient"
+            if chat_id:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"✅ Native currency transfer successful!\nTransfer of {amount_readable} native currency to {recipient_address} confirmed.\nTransaction Hash: `{transaction_hash}`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            logger.info(f"Native currency transfer successful. Hash: {transaction_hash}, Memo: {tx_memo}")
         else:
             # implement other transaction types as needed
             logger.error(f"Unknown transaction type: {tx_memo.tx_type}")
@@ -142,6 +192,9 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.info("Escrow wallet is provisioned and has sufficient funds.")
+
+    # Add this after the escrow wallet check but before the yield
+    await log_token()  # This will log the token
 
     # to keep this demo self contained, we are going to check our 1Shot API account for an existing transaction endpoint for the 
     # contract at 0xA1BfEd6c6F1C3A516590edDAc7A8e359C2189A61 on the Sepolia network, if we don't have one, we'll create it automatically
@@ -181,6 +234,7 @@ async def lifespan(app: FastAPI):
             CommandHandler("cancel", canceler)
         ],
         per_chat=True,
+        per_message=True
     )
 
     # handle when the user calls /start
@@ -189,15 +243,26 @@ async def lifespan(app: FastAPI):
     app.application.add_handler(CommandHandler("checkbalance", check_balance))
     app.application.add_handler(CommandHandler("time", get_time))
     app.application.add_handler(CommandHandler("hello", hello))
+    app.application.add_handler(CommandHandler("help", help_command))
+    app.application.add_handler(get_wallet_handler())
+    app.application.add_handler(get_transaction_handler())
+    app.application.add_handler(get_transaction_endpoints_handler())
     app.application.add_handler(get_expense_conversation_handler())
     app.application.add_handler(get_goal_conversation_handler())
     app.application.add_handler(get_budget_conversation_handler())
-    app.application.add_handler(get_token_deployment_conversation_handler())  # Token deployment as a top-level handler
+    app.application.add_handler(get_token_deployment_conversation_handler())
+    app.application.add_handler(get_token_transfer_handler())
+    app.application.add_handler(get_report_handler())
+    app.application.add_handler(get_escrow_info_handler())
     # handles updates from 1shot by selecting Telegram updates of type WebhookPayload
     app.application.add_handler(TypeHandler(type=WebhookPayload, callback=webhook_update))
 
     # track what chats the bot is in, can be useful for group-based features
     app.application.add_handler(ChatMemberHandler(track_chats, ChatMemberHandler.MY_CHAT_MEMBER))
+    
+    # Add AI chat handler to respond to non-command messages
+    # This should be added last so it doesn't interfere with other handlers
+    app.application.add_handler(get_ai_chat_handler())
 
     # TODO: use secret-token: https://docs.python-telegram-bot.org/en/stable/telegram.bot.html#telegram.Bot.set_webhook.params.secret_token
     await app.application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
